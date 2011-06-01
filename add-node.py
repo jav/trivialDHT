@@ -22,3 +22,4 @@ s.connect((HOST, PORT))
 print "Sending: ", msg.toString()
 s.send(msg.toString())
 
+s.close()
