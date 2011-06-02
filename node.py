@@ -1,20 +1,20 @@
 
 import SocketServer
-import hashlib # For keys
+import hashlib 
 import random
 import message 
 import sys
 import string
 import socket
-
-### Global vars (later to be class members)
-
-peerList = dict()
-dataList = dict()
+import copy 
+import threading
+import time 
+import signal
 
 class DHTNode:
     m_key = ""
-    m_nearestKey = ""
+    m_prevKey = ""
+    m_nextKey = ""
     m_peerList = dict()
     m_address = ""
     m_port = 0
@@ -42,21 +42,22 @@ class DHTNode:
     def setPort(self, port):
         self.m_port = port
 
-    def doAddNode(self, nodeAddress, nodePort):
-        print "doAddNode():", "nodeAddress:", nodeAddress, "nodePort", str(nodePort)
+    def doAddNode(self, destAddress, destPort, nodeAddress, nodePort, nodeKey):
+        print "doAddNode():", "destAddress:", destAddress, "destPort", str(destPort), "nodeAddress:", nodeAddress, "nodePort", nodePort
         msg = message.Message()
-        msg.setType(2)
-        msg.setMessage( self.m_address + ":" + str(self.m_port) + " " + self.m_key )
-        
+        msg.setType(1)
+        msg.setMessage( nodeAddress + ":" + str(nodePort) + " " + nodeKey )
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((nodeAddress, nodePort))
+        s.connect((destAddress, destPort))
         s.send(msg.toString())
         s.close()
 
     def onAddNode(self, msg, sock):
         msgAddress = msg.getMessage().partition(" ")[0]
         msgId = msg.getMessage().partition(" ")[2]
-        print "addNode() : ", msgId, msgAddress
+
+        print "onAddNode() : ", msgId, msgAddress
+
         # If key already exists, just update the post and exit
         if msgId in self.m_peerList.keys() :
             self.m_peerList[msgId] = msgAddress
@@ -67,46 +68,78 @@ class DHTNode:
 
         ## Find nearest previous neighbor
         pos = 0
-        nearestKey = ""
+        prevKey = ""
 
-        print "My key:", self.m_key
-        for key in sorted(self.m_peerList.iterkeys()):
-            print "key: ",key
-            if key < self.m_key and key > nearestKey :
-                print "new nearestKey: ", nearestKey
-                nearestKey = key
+        print "onAddNode(): My key:", self.m_key
 
-        if( "" == nearestKey):
-            nearestKey = msgId
+        keyList = sorted(self.m_peerList.iterkeys())
+        for key in keyList:
+            print "onAddNode(): key: ",key
+            if key < self.m_key and key > prevKey :
+                print "onAddNode(): new prevKey: ", prevKey
+                prevKey = key
 
-        print "Result:"
-        print "My Key:", self.m_key
-        print "Nearest Key:", nearestKey
-        print "PeerList:" , self.m_peerList
+        # If prevKey is null ("") then pick the highest one in peerList
+        # Makes the "list" circular
+        if "" == prevKey and 0 < len( keyList ) :
+                prevKey = keyList[-1]
+                print "onAddNode(): new prevKey: ", prevKey
 
+        print "onAddNode(): Result:"
+        print "onAddNode(): My Key:", self.m_key
+        print "onAddNode(): Nearest Key:", prevKey
+        print "onAddNode(): PeerList:" , self.m_peerList
+
+        (dAddr, s, dPort) = msgAddress.partition(":")
+        print "onAddNode(): doAddNode(",dAddr, dPort, self.getAddress(), str(self.getPort()),self.getKey(), ")"
+        self.doAddNode(dAddr, int(dPort), self.getAddress(), self.getPort(), self.getKey())
 
     def doQueryForNodes(self, nodeAddress, nodePort):
         print "doQueryForNodes():", "nodeAddress:", nodeAddress, "nodePort", str(nodePort)
         msg = message.Message()
         msg.setType(2)
-        msg.setMessage(self.m_key)
-        
+        msg.setMessage( self.getAddress() + ":" + str(self.getPort()) + " " + self.m_key )
+    
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((nodeAddress, nodePort))
-        s.send(msg.toString())
+        try:
+            s.send(msg.toString())
+        except Exception:
+            pass
         s.close()
-            
+        print "doQueryForNodes(): done!"
+
 
     def onQueryForNodes(self, msg, sock ):
-        sock.send("You asked for nodes?")
-        
-    
+        print "onQueryForNodes(): ",msg.getMessage()
+        if 0 == len(self.m_peerList):
+            return
+
+        (remoteAddr, s, remoteKey) = msg.getMessage().partition(" ")
+        (remoteIp, s, remotePort) = remoteAddr.partition(":")
+
+        # Pick three random nodes
+        redNodeList = copy.deepcopy(self.m_peerList)
+        del redNodeList[remoteKey]
+        print "onQueryForNodes(): redNodeList:", redNodeList
+        for i in range (0 , min(3, len(redNodeList ) ) ):
+            if 0 < len( redNodeList ) :
+                print "Random choice from listsize:", len(redNodeList)
+                print redNodeList
+                keyToSend = random.choice( redNodeList.keys() )
+                print keyToSend
+                (pAddr, s, pPort) = redNodeList[keyToSend].partition(":")
+                (dAddr, s, dPort) = self.m_peerList[remoteKey].partition(":")
+
+                del redNodeList[keyToSend]
+                self.doAddNode(remoteIp, int(remotePort), pAddr, int(pPort), keyToSend )
+
 #Not yet implemented!
-    def addData(self, msg):
+    def onAddData(self, msg):
         sha = haslib.sha1()
         sha.update( msg.getMessage() )
         ## Check that sha is in range
-        if self.m_nearestKey < sha.hexdigest() and sha.hexdigest() <= self.m_key :
+        if self.m_prevKey < sha.hexdigest() and sha.hexdigest() <= self.m_key :
             ## Add the data
             print "add data"
             print "answer OK"
@@ -139,34 +172,60 @@ class MyRequestHandler(SocketServer.BaseRequestHandler):
             msg.parseMsg( recvMsg )
 
             if( 1 == msg.getType() ):
+                print "onAddNode!"
                 node.onAddNode( msg, self.request )
-            
+            if( 2 == msg.getType() ):
+                print "onQueryForNodes!"
+                node.onQueryForNodes( msg, self.request )
             if( 10 == msg.getType() ):
-                node.addData( msg, self.request )
+                print "onAddData!"
+                node.onAddData( msg, self.request )
+
+            print "" 
 
             recvMsg = self.request.recv(1024).strip()        
 
 
+class ThreadClass(threading.Thread):
+    def run(self):
+        print "listen on '', " + sys.argv[2]
+        myServer = SocketServer.TCPServer(('', int( sys.argv[2] ) ),
+                                          MyRequestHandler)
+        
+        myServer.serve_forever()
+        
+
+def signal_handler(signal, frame):
+        print 'You pressed Ctrl+C!'
+        sys.exit(0)            
+
+### Global var
+node = DHTNode()
 
 ### MAIN()
+def main(args):
 
-node = DHTNode()
-node.setAddress(sys.argv[1])
-node.setPort( int(sys.argv[2]) )
+    signal.signal(signal.SIGINT, signal_handler)
 
-print "My ID:", node.getKey()
+    node.setAddress(args[1])
+    node.setPort( int(args[2]) )
 
-## BOOTSTRAP
-# if defined
-if len(sys.argv) == 5:
-    # add known node to list
-    # query list for new nodes
-    node.doAddNode(sys.argv[3], int(sys.argv[4]) )
-    node.doQueryForNodes( sys.argv[3], int(sys.argv[4]) )
+    print "My ID:", node.getKey()
 
-## ORDINARY OPERATION
+    ### ORDINARY OPERATION
+    # start "main" thread
+    t = ThreadClass()
+    t.start()
 
-myServer = SocketServer.TCPServer(('', int( sys.argv[2] ) ),
-                MyRequestHandler)
+    ## BOOTSTRAP
+    # if defined
+    if len(args) == 5:
+        time.sleep(2)
+        # register with known node
+        # query list for new nodes
+        node.doAddNode(args[3], int(args[4]), args[1], int(args[2]), node.getKey() )
+        node.doQueryForNodes(args[3], int(args[4]) )
 
-myServer.serve_forever()
+
+if __name__ == '__main__':
+  main(sys.argv)
