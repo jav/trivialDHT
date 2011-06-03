@@ -18,6 +18,7 @@ class DHTNode:
     m_peerList = dict()
     m_address = ""
     m_port = 0
+    m_data = dict()
 
     def __init__(self):
         self.mkKey()
@@ -26,6 +27,7 @@ class DHTNode:
         sha = hashlib.sha1()
         sha.update( str(random.random()) )
         self.m_key = sha.hexdigest()
+        #self.m_key = str(7190000000000000000000000000000000000000)
 
     def getKey(self):
         return self.m_key
@@ -135,19 +137,37 @@ class DHTNode:
                 self.doAddNode(remoteIp, int(remotePort), pAddr, int(pPort), keyToSend )
 
 #Not yet implemented!
-    def onAddData(self, msg):
-        sha = haslib.sha1()
+    def onAddData(self, msg, sock):
+        sha = hashlib.sha1()
         sha.update( msg.getMessage() )
         ## Check that sha is in range
+        print "hash for:", msg.getMessage(), "was:", sha.hexdigest()
+        print self.m_peerList
+        print "My id:", self.m_key
+
+        ## TODO: Fix "circular" list! This won't work if I have the lowest key!
         if self.m_prevKey < sha.hexdigest() and sha.hexdigest() <= self.m_key :
             ## Add the data
             print "add data"
             print "answer OK"
-
+            this.m_data[sha.hexdigest()] = msg.getMessage()
+            okMsg = Message()
+            okMsg.setType(11)
+            okMsg.setMessage("OK")
+            sock.send(okMsg.toString())
+            
         else:
             print "divert to next node"
             print "answer with correct node address"
-        ## find the dictionary 
+
+            # Find a better node and save as "peer"
+
+            divMsg = Message()
+            divMsg.setType(12)
+            divMsg.setMessage(peerAddr)
+            sock.send(divMsg.toString())
+            
+
 
 
 class MyRequestHandler(SocketServer.BaseRequestHandler):

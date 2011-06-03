@@ -13,10 +13,10 @@ sha.update( str(random.random() ) )
 myId = sha.hexdigest()
 
 msg = message.Message()
-msg.setType(1)
+msg.setType(10)
 
 
-msg.setMessage("127.0.0.1:8998 " + myId)
+msg.setMessage("ADDING NEW DATA" )
 
 s.connect((HOST, PORT))
 print "Sending: ", msg.toString()
