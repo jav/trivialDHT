@@ -1,6 +1,25 @@
 import string
 import re 
 
+
+####
+## addNode
+## Type: 1
+## msg: node-to-add-IP:node-to-add-port node-to-add-key
+##
+## queryForNodes
+## Type: 2
+## Msg: queryers-IP:queryer-port queryer-key
+##
+## addData 
+## Type: 10
+##
+## dataRecordedOK
+## Type: 11
+##
+## dataDiverted
+## Type: 12
+
 class Message:
     m_rawMessage = ""
     m_type = ""
