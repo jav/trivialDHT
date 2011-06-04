@@ -8,6 +8,9 @@ class CircularList:
     def size(self):
         return len(self.m_list)
 
+    def __getitem__(self,key):
+        return self.m_dict[ key ]
+
     def get(self, key ):
         return self.m_dict[ key ]
 
