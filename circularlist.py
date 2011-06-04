@@ -10,7 +10,7 @@ class CircularList:
 
     def add(self, key, val):
         if key in self.m_dict:
-            return 0
+            return -1
         self.m_list.append(key)
         self.m_list.sort() # Sort on insert
         self.m_dict[key] = val
@@ -18,7 +18,7 @@ class CircularList:
 
     def remove(self, key):
         if key not in self.m_dict:
-            return 0
+            return -1
         del m_dict[key]
         self.m_list.remove(key)
         return 1
@@ -28,7 +28,7 @@ class CircularList:
 
     def getNextKey(self, key):
         if 0 == len(self.m_list):
-            return 0
+            return -1
 
         # for each, do arr-key - key, smallest but > 0 is next.
         nextKey = ""
@@ -65,8 +65,9 @@ class CircularList:
         return self.m_dict[ self.getPrevKey(key) ]
 
     def toString(self):
-        retStr = ""
+        retStr = "{"
         for item in self.m_list:
-            retStr += "{"+str(item)+":"
-            retStr += str(self.m_dict[item])+"}"
+            retStr += "("+str(item)+":"
+            retStr += str(self.m_dict[item])+")"
+        retStr += "}"
         return retStr
