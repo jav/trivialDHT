@@ -1,8 +1,11 @@
+import random
+import copy
+
 class CircularList:
     m_list = list()
     m_dict = dict()
 
-    def getSize():
+    def size(self):
         return len(self.m_list)
 
     def get(self, key ):
@@ -19,7 +22,7 @@ class CircularList:
     def remove(self, key):
         if key not in self.m_dict:
             return -1
-        del m_dict[key]
+        del self.m_dict[key]
         self.m_list.remove(key)
         return 1
 
@@ -27,7 +30,7 @@ class CircularList:
         return self.m_dict[key]
 
     def getNextKey(self, key):
-        if 0 == len(self.m_list):
+        if 0 == self.size():
             return -1
 
         # for each, do arr-key - key, smallest but > 0 is next.
@@ -46,7 +49,7 @@ class CircularList:
         return self.m_dict[ self.getNextKey(key) ]
 
     def getPrevKey(self, key):
-        if 0 == len(self.m_list):
+        if 0 == self.size():
             return 0
 
         # for each, do arr-key - key, smallest but > 0 is next.
@@ -71,3 +74,12 @@ class CircularList:
             retStr += str(self.m_dict[item])+")"
         retStr += "}"
         return retStr
+
+    def getRandomKeys(self, count):
+        if 0 == len(self.m_list):
+            return []
+        count = min(count, len(self.m_list) )
+
+        randList = copy.deepcopy(self.m_list)
+        random.shuffle(randList)
+        return randList[0:count]
