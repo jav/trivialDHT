@@ -10,15 +10,15 @@ import copy
 import threading
 import time 
 import signal
+import circularlist
+
+# TODO: Optimize so that self cannot occur in reply on queryForNodes
 
 class DHTNode:
     m_key = ""
-    m_prevKey = ""
-    m_nextKey = ""
-    m_peerList = dict()
+    m_keyList = circularlist.CircularList()
     m_address = ""
     m_port = 0
-    m_data = dict()
 
     def __init__(self):
         self.mkKey()
@@ -33,10 +33,10 @@ class DHTNode:
         return self.m_key
 
     def getAddress(self):
-        return self.m_addres
+        return self.m_address
 
     def setAddress(self, address):
-        self.m_addres = address
+        self.m_address = address
 
     def getPort(self):
         return self.m_port
@@ -61,36 +61,14 @@ class DHTNode:
         print "onAddNode() : ", msgId, msgAddress
 
         # If key already exists, just update the post and exit
-        if msgId in self.m_peerList.keys() :
-            self.m_peerList[msgId] = msgAddress
+
+        if -1 == self.m_keyList.add(msgId, msgAddress):
             return
-
-        #Add new key
-        self.m_peerList[msgId] = msgAddress
-
-        ## Find nearest previous neighbor
-        pos = 0
-        prevKey = ""
-
-        print "onAddNode(): My key:", self.m_key
-
-        keyList = sorted(self.m_peerList.iterkeys())
-        for key in keyList:
-            print "onAddNode(): key: ",key
-            if key < self.m_key and key > prevKey :
-                print "onAddNode(): new prevKey: ", prevKey
-                prevKey = key
-
-        # If prevKey is null ("") then pick the highest one in peerList
-        # Makes the "list" circular
-        if "" == prevKey and 0 < len( keyList ) :
-                prevKey = keyList[-1]
-                print "onAddNode(): new prevKey: ", prevKey
 
         print "onAddNode(): Result:"
         print "onAddNode(): My Key:", self.m_key
-        print "onAddNode(): Nearest Key:", prevKey
-        print "onAddNode(): PeerList:" , self.m_peerList
+        print "onAddNode(): Nearest Key:", self.m_keyList.getPrevKey(self.m_key)
+        print "onAddNode(): PeerList:" , self.m_keyList.toString()
 
         (dAddr, s, dPort) = msgAddress.partition(":")
         print "onAddNode(): doAddNode(",dAddr, dPort, self.getAddress(), str(self.getPort()),self.getKey(), ")"
@@ -114,39 +92,34 @@ class DHTNode:
 
     def onQueryForNodes(self, msg, sock ):
         print "onQueryForNodes(): ",msg.getMessage()
-        if 0 == len(self.m_peerList):
+        if 0 == self.m_keyList.size():
             return
 
+        # Who did the query
         (remoteAddr, s, remoteKey) = msg.getMessage().partition(" ")
         (remoteIp, s, remotePort) = remoteAddr.partition(":")
 
         # Pick three random nodes
-        redNodeList = copy.deepcopy(self.m_peerList)
-        del redNodeList[remoteKey]
-        print "onQueryForNodes(): redNodeList:", redNodeList
-        for i in range (0 , min(3, len(redNodeList ) ) ):
-            if 0 < len( redNodeList ) :
-                print "Random choice from listsize:", len(redNodeList)
-                print redNodeList
-                keyToSend = random.choice( redNodeList.keys() )
-                print keyToSend
-                (pAddr, s, pPort) = redNodeList[keyToSend].partition(":")
-                (dAddr, s, dPort) = self.m_peerList[remoteKey].partition(":")
-
-                del redNodeList[keyToSend]
-                self.doAddNode(remoteIp, int(remotePort), pAddr, int(pPort), keyToSend )
+        for keyToSend in self.m_keyList.getRandomKeys(3):
+            print keyToSend
+            (pAddr, s, pPort) = self.m_keyList[keyToSend].partition(":")
+            (dAddr, s, dPort) = self.m_keyList[remoteKey].partition(":")
+            print  self.m_keyList[keyToSend]
+            print self.m_keyList.toString()
+            print "doAddNode(", remoteIp, remotePort, pAddr, pPort, keyToSend, ")"
+            self.doAddNode(remoteIp, int(remotePort), pAddr, int(pPort), keyToSend )
 
 #Not yet implemented!
     def onAddData(self, msg, sock):
         sha = hashlib.sha1()
         sha.update( msg.getMessage() )
-        ## Check that sha is in range
+
         print "hash for:", msg.getMessage(), "was:", sha.hexdigest()
-        print self.m_peerList
+        print self.m_keyList
         print "My id:", self.m_key
 
-        ## TODO: Fix "circular" list! This won't work if I have the lowest key!
-        if self.m_prevKey < sha.hexdigest() and sha.hexdigest() <= self.m_key :
+        ## Check that sha is in range
+        if self.m_peerList.getPrevKey(self.m_key) < sha.hexdigest() and sha.hexdigest() <= self.m_key :
             ## Add the data
             print "add data"
             print "answer OK"
