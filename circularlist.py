@@ -53,7 +53,7 @@ class CircularList:
 
     def getPrevKey(self, key):
         if 0 == self.size():
-            return 0
+            return -1
 
         # for each, do arr-key - key, smallest but > 0 is next.
         nextKey = ""
@@ -78,11 +78,14 @@ class CircularList:
         retStr += "}"
         return retStr
 
-    def getRandomKeys(self, count):
+    def getRandomKeys(self, count, exclude=[]):
         if 0 == len(self.m_list):
             return []
         count = min(count, len(self.m_list) )
 
         randList = copy.deepcopy(self.m_list)
+        for item in exclude:
+            randList.remove(item)
+
         random.shuffle(randList)
         return randList[0:count]

@@ -5,7 +5,7 @@ import re
 ####
 ## addNode
 ## Type: 1
-## msg: node-to-add-IP:node-to-add-port node-to-add-key
+## Msg: node-to-add-IP:node-to-add-port node-to-add-key
 ##
 ## queryForNodes
 ## Type: 2
@@ -13,12 +13,26 @@ import re
 ##
 ## addData 
 ## Type: 10
+## Msg: dataToAdd
 ##
 ## dataRecordedOK
 ## Type: 11
+## Msg: empty
 ##
 ## dataDiverted
 ## Type: 12
+## Msg: suggested-node-IP:suggested-node-port suggested-node-key
+##
+## getData
+## Type: 20
+## Msg: keyToGet
+## 
+## dataReplyOK
+## Type: 21
+## 
+## dataReplyDivert
+## Type: 22
+## Msg: suggested-node-IP:suggested-node-prot suggested-node-key
 
 class Message:
     m_rawMessage = ""

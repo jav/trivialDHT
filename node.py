@@ -12,22 +12,25 @@ import time
 import signal
 import circularlist
 
-# TODO: Optimize so that self cannot occur in reply on queryForNodes
+# TODO: Optimize so that self cannot occur in reply on queryForNodes (in circular list?)
+# TODO: Dont keep the key as a hexdigest (string)
 
 class DHTNode:
     m_key = ""
     m_keyList = circularlist.CircularList()
     m_address = ""
     m_port = 0
+    m_data = dict()
 
     def __init__(self):
         self.mkKey()
 
     def mkKey(self):
-        sha = hashlib.sha1()
-        sha.update( str(random.random()) )
-        self.m_key = sha.hexdigest()
-        #self.m_key = str(7190000000000000000000000000000000000000)
+        if "" == self.m_key:
+            sha = hashlib.sha1()
+            sha.update( str(random.random()) )
+            self.m_key = sha.hexdigest()
+            #self.m_key = "940000000714f13a9fb6603676867c3f81c73bcf" #kept for debugging
 
     def getKey(self):
         return self.m_key
@@ -37,12 +40,16 @@ class DHTNode:
 
     def setAddress(self, address):
         self.m_address = address
+        if 0 != self.m_port:
+            self.m_keyList.add(self.m_key, self.m_address+":"+str(self.m_port) )
 
     def getPort(self):
         return self.m_port
 
     def setPort(self, port):
         self.m_port = port
+        if "" != self.m_address:
+            self.m_keyList.add(self.m_key, self.m_address+":"+str(self.m_port) )
 
     def doAddNode(self, destAddress, destPort, nodeAddress, nodePort, nodeKey):
         print "doAddNode():", "destAddress:", destAddress, "destPort", str(destPort), "nodeAddress:", nodeAddress, "nodePort", nodePort
@@ -65,9 +72,6 @@ class DHTNode:
         if -1 == self.m_keyList.add(msgId, msgAddress):
             return
 
-        print "onAddNode(): Result:"
-        print "onAddNode(): My Key:", self.m_key
-        print "onAddNode(): Nearest Key:", self.m_keyList.getPrevKey(self.m_key)
         print "onAddNode(): PeerList:" , self.m_keyList.toString()
 
         (dAddr, s, dPort) = msgAddress.partition(":")
@@ -109,22 +113,23 @@ class DHTNode:
             print "doAddNode(", remoteIp, remotePort, pAddr, pPort, keyToSend, ")"
             self.doAddNode(remoteIp, int(remotePort), pAddr, int(pPort), keyToSend )
 
-#Not yet implemented!
+    #TODO: Add case for when I think I should have the data, but don't
     def onAddData(self, msg, sock):
         sha = hashlib.sha1()
         sha.update( msg.getMessage() )
+        key = sha.hexdigest()
 
-        print "hash for:", msg.getMessage(), "was:", sha.hexdigest()
-        print self.m_keyList
+        print "hash for:", msg.getMessage(), "was:", key
+        print self.m_keyList.toString()
         print "My id:", self.m_key
 
-        ## Check that sha is in range
-        if self.m_peerList.getPrevKey(self.m_key) < sha.hexdigest() and sha.hexdigest() <= self.m_key :
+        
+        if self.isKeyInRange(key):
             ## Add the data
-            print "add data"
             print "answer OK"
-            this.m_data[sha.hexdigest()] = msg.getMessage()
-            okMsg = Message()
+            ## TODO: Chache eviction scheme here.
+            self.m_data[sha.hexdigest()] = msg.getMessage()
+            okMsg = message.Message()
             okMsg.setType(11)
             okMsg.setMessage("OK")
             sock.send(okMsg.toString())
@@ -134,13 +139,60 @@ class DHTNode:
             print "answer with correct node address"
 
             # Find a better node and save as "peer"
-
-            divMsg = Message()
+            nextPeer = self.m_keyList.getPrevVal(key) + " "+  self.m_keyList.getPrevKey(key)
+            print "Going to answer", nextPeer
+            divMsg = message.Message()
             divMsg.setType(12)
-            divMsg.setMessage(peerAddr)
-            sock.send(divMsg.toString())
-            
+            divMsg.setMessage( nextPeer )
 
+            print "divertReply:", divMsg.toString()
+            #divMsg.setMessage(peerAddr)
+            sock.send(divMsg.toString())
+
+    def onGetData(self, msg, sock):
+        print "onGetData(", msg.getType(), msg.getMessage(), ")"
+        key = msg.getMessage()
+
+        print self.m_data
+
+        if key in self.m_data:
+            print "I should have that data..."
+            msg = message.Message()
+            msg.setType(21)
+            msg.setMessage( self.m_data[key] )
+            sock.send( msg.toString() )
+            
+        else:
+            print "Some one else should have that data..."
+            print "msgKey:", key
+            print "mykey:", self.m_key
+            print "keyList:", self.m_keyList.toString()
+            msg = message.Message()
+            msg.setType(22)
+            suggestedNodeKey = self.m_keyList.getPrevKey(key)
+            suggestedNodeAddr = self.m_keyList.get(suggestedNodeKey)
+            print "msg.setMessage( "+suggestedNodeAddr+" "+suggestedNodeKey+" )"
+            msg.setMessage( suggestedNodeAddr+" "+suggestedNodeKey  )
+            sock.send( msg.toString() )
+
+    
+    def isKeyInRange(self, key):
+        print "isKeyInRange(",key,")"
+        print self.m_keyList.toString()
+
+        if 1 >= self.m_keyList.size():
+            return 1
+        prevKey = self.m_keyList.getPrevKey(self.m_key)
+        if(prevKey < self.m_key):
+            if prevKey < key and key <= self.m_key:
+                return 1
+            else: return 0
+        else:
+            if prevKey > key or key <= self.m_key:
+                return 1
+            else: return 0
+            
+                
 
 
 class MyRequestHandler(SocketServer.BaseRequestHandler):
@@ -173,6 +225,13 @@ class MyRequestHandler(SocketServer.BaseRequestHandler):
             if( 10 == msg.getType() ):
                 print "onAddData!"
                 node.onAddData( msg, self.request )
+            if( 11 == msg.getType() ):
+                print "Data was added (ignored message)"
+            if( 12 == msg.getType() ):
+                print "dataDiverted (ignored message)"
+            if( 20 == msg.getType() ):
+                print "onGetData!"
+                node.onGetData( msg, self.request )
 
             print "" 
 
@@ -196,6 +255,7 @@ def signal_handler(signal, frame):
 node = DHTNode()
 
 ### MAIN()
+# args: 1: myIP, 2: myPort, 3: knownIP, 4: knownPort
 def main(args):
 
     signal.signal(signal.SIGINT, signal_handler)
