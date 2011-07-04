@@ -22,8 +22,11 @@ class DHTNode:
     m_port = 0
     m_data = dict()
 
-    def __init__(self):
+    def __init__(self, address, port):
         self.mkKey()
+        self.setAddress(address)
+        self.setPort(port)
+        self.m_keyList.add(self.m_key, self.m_address+":"+str(self.m_port) )
 
     def mkKey(self):
         if "" == self.m_key:
@@ -40,17 +43,13 @@ class DHTNode:
 
     def setAddress(self, address):
         self.m_address = address
-        if 0 != self.m_port:
-            self.m_keyList.add(self.m_key, self.m_address+":"+str(self.m_port) )
-
+ 
     def getPort(self):
         return self.m_port
 
     def setPort(self, port):
         self.m_port = port
-        if "" != self.m_address:
-            self.m_keyList.add(self.m_key, self.m_address+":"+str(self.m_port) )
-
+ 
     def doAddNode(self, destAddress, destPort, nodeAddress, nodePort, nodeKey):
         print "doAddNode():", "destAddress:", destAddress, "destPort", str(destPort), "nodeAddress:", nodeAddress, "nodePort", nodePort
         msg = message.Message()
@@ -252,7 +251,7 @@ def signal_handler(signal, frame):
         sys.exit(0)            
 
 ### Global var
-node = DHTNode()
+
 
 ### MAIN()
 # args: 1: myIP, 2: myPort, 3: knownIP, 4: knownPort
@@ -260,8 +259,7 @@ def main(args):
 
     signal.signal(signal.SIGINT, signal_handler)
 
-    node.setAddress(args[1])
-    node.setPort( int(args[2]) )
+    node = DHTNode(args[1],  int(args[2]) )
 
     print "My ID:", node.getKey()
 
