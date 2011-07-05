@@ -22,7 +22,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
     m_port = 0
     m_data = dict()
     m_zmqctx = 0;
-
+    m_sock = 0;
+    
     def __init__(self, address, port):
         super(DHTNode, self).__init__()
         self.m_zmqctx = zmq.Context()
@@ -36,16 +37,15 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
         address = self.getAddress()
         port = str(self.getPort())
         print "listen on '', " + address + ":" + port
-        listener = self.m_zmqctx.socket(zmq.REP)
-        listener.bind ("tcp://"+ address + ":" + port )
+        self.m_sock = self.m_zmqctx.socket(zmq.REP)
+        self.m_sock.bind ("tcp://"+ address + ":" + port )
 
         while( 1 ) :
             print "while(1)"
-            message = listener.recv()
+            message = self.m_sock.recv()
             print "Received request: ", message
             time.sleep(2)
             
-
 
     def mkKey(self):
         if "" == self.m_key:
@@ -70,6 +70,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
         self.m_port = port
  
     def doAddNode(self, destAddress, destPort, nodeAddress, nodePort, nodeKey):
+        if not self.isAlive(): return false
+        
         print "doAddNode():", "destAddress:", destAddress, "destPort", str(destPort), "nodeAddress:", nodeAddress, "nodePort", nodePort
         msg = message.Message()
         msg.setType(1)
@@ -80,6 +82,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
         s.close()
 
     def onAddNode(self, msg, sock):
+        if not self.isAlive(): return false
+        
         msgAddress = msg.getMessage().partition(" ")[0]
         msgId = msg.getMessage().partition(" ")[2]
 
@@ -97,6 +101,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
         self.doAddNode(dAddr, int(dPort), self.getAddress(), self.getPort(), self.getKey())
 
     def doQueryForNodes(self, nodeAddress, nodePort):
+        if not self.isAlive(): return false
+        
         print "doQueryForNodes():", "nodeAddress:", nodeAddress, "nodePort", str(nodePort)
         msg = message.Message()
         msg.setType(2)
@@ -113,6 +119,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
 
 
     def onQueryForNodes(self, msg, sock ):
+        if not self.isAlive(): return false
+        
         print "onQueryForNodes(): ",msg.getMessage()
         if 0 == self.m_keyList.size():
             return
@@ -133,6 +141,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
 
     #TODO: Add case for when I think I should have the data, but don't
     def onAddData(self, msg, sock):
+        if not self.isAlive(): return false
+                
         sha = hashlib.sha1()
         sha.update( msg.getMessage() )
         key = sha.hexdigest()
@@ -168,6 +178,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
             sock.send(divMsg.toString())
 
     def onGetData(self, msg, sock):
+        if not self.isAlive(): return false
+        
         print "onGetData(", msg.getType(), msg.getMessage(), ")"
         key = msg.getMessage()
 
@@ -195,6 +207,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
 
     
     def isKeyInRange(self, key):
+        if not self.isAlive(): return false
+        
         print "isKeyInRange(",key,")"
         print self.m_keyList.toString()
 
@@ -212,6 +226,8 @@ class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
             
 
     def handle(self):
+        if not self.isAlive(): return false
+        
         print "Connected:", self.client_address
 
 
