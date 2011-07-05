@@ -1,4 +1,4 @@
-
+import zmq
 import SocketServer
 import hashlib 
 import random
@@ -15,25 +15,44 @@ import circularlist
 # TODO: Optimize so that self cannot occur in reply on queryForNodes (in circular list?)
 # TODO: Dont keep the key as a hexdigest (string)
 
-class DHTNode:
+class DHTNode(threading.Thread, SocketServer.BaseRequestHandler):
     m_key = ""
     m_keyList = circularlist.CircularList()
     m_address = ""
     m_port = 0
     m_data = dict()
+    m_zmqctx = 0;
 
     def __init__(self, address, port):
+        super(DHTNode, self).__init__()
+        self.m_zmqctx = zmq.Context()
         self.mkKey()
         self.setAddress(address)
         self.setPort(port)
         self.m_keyList.add(self.m_key, self.m_address+":"+str(self.m_port) )
+
+    def run(self):
+        print "run()"
+        address = self.getAddress()
+        port = str(self.getPort())
+        print "listen on '', " + address + ":" + port
+        listener = self.m_zmqctx.socket(zmq.REP)
+        listener.bind ("tcp://"+ address + ":" + port )
+
+        while( 1 ) :
+            print "while(1)"
+            message = listener.recv()
+            print "Received request: ", message
+            time.sleep(2)
+            
+
 
     def mkKey(self):
         if "" == self.m_key:
             sha = hashlib.sha1()
             sha.update( str(random.random()) )
             self.m_key = sha.hexdigest()
-            #self.m_key = "940000000714f13a9fb6603676867c3f81c73bcf" #kept for debugging
+            #self.m_key = "940000000714f13a9fb6603676867c3f81c73bcf" #line kept for debugging
 
     def getKey(self):
         return self.m_key
@@ -83,8 +102,8 @@ class DHTNode:
         msg.setType(2)
         msg.setMessage( self.getAddress() + ":" + str(self.getPort()) + " " + self.m_key )
     
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((nodeAddress, nodePort))
+        s = self.m_zmqctx.socket(zmq.REQ)
+        s.connect("tcp://" + nodeAddress +":" + str( nodePort ) )
         try:
             s.send(msg.toString())
         except Exception:
@@ -191,10 +210,7 @@ class DHTNode:
                 return 1
             else: return 0
             
-                
 
-
-class MyRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         print "Connected:", self.client_address
 
@@ -217,34 +233,25 @@ class MyRequestHandler(SocketServer.BaseRequestHandler):
 
             if( 1 == msg.getType() ):
                 print "onAddNode!"
-                node.onAddNode( msg, self.request )
+                self.onAddNode( msg, self.request )
             if( 2 == msg.getType() ):
                 print "onQueryForNodes!"
-                node.onQueryForNodes( msg, self.request )
+                self.onQueryForNodes( msg, self.request )
             if( 10 == msg.getType() ):
                 print "onAddData!"
-                node.onAddData( msg, self.request )
+                self.onAddData( msg, self.request )
             if( 11 == msg.getType() ):
                 print "Data was added (ignored message)"
             if( 12 == msg.getType() ):
                 print "dataDiverted (ignored message)"
             if( 20 == msg.getType() ):
                 print "onGetData!"
-                node.onGetData( msg, self.request )
+                self.onGetData( msg, self.request )
 
             print "" 
 
             recvMsg = self.request.recv(1024).strip()        
 
-
-class ThreadClass(threading.Thread):
-    def run(self):
-        print "listen on '', " + sys.argv[2]
-        myServer = SocketServer.TCPServer(('', int( sys.argv[2] ) ),
-                                          MyRequestHandler)
-        
-        myServer.serve_forever()
-        
 
 def signal_handler(signal, frame):
         print 'You pressed Ctrl+C!'
@@ -256,7 +263,6 @@ def signal_handler(signal, frame):
 ### MAIN()
 # args: 1: myIP, 2: myPort, 3: knownIP, 4: knownPort
 def main(args):
-
     signal.signal(signal.SIGINT, signal_handler)
 
     node = DHTNode(args[1],  int(args[2]) )
@@ -264,9 +270,8 @@ def main(args):
     print "My ID:", node.getKey()
 
     ### ORDINARY OPERATION
-    # start "main" thread
-    t = ThreadClass()
-    t.start()
+    # start the DHT Node thread
+    node.start()
 
     ## BOOTSTRAP
     # if defined
@@ -277,6 +282,7 @@ def main(args):
         node.doAddNode(args[3], int(args[4]), args[1], int(args[2]), node.getKey() )
         node.doQueryForNodes(args[3], int(args[4]) )
 
+    node.join()
 
 if __name__ == '__main__':
   main(sys.argv)
